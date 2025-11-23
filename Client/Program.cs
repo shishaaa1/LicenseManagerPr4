@@ -17,23 +17,64 @@ namespace Client
         static void Main(string[] args)
         {
             OnSettings();
+
+            Thread tCheckToken = new Thread(CheckToken);
+            tCheckToken.Start();
+
             while (true)
                 SetCommand();
         }
+        static void CheckToken()
+        {
+            while (true)
+            {
+                if (!String.IsNullOrEmpty(ClientToken))
+                {
+                    IPEndPoint EndPoint = new IPEndPoint(ServerIpAddress, ServerPort);
+                    Socket Socket = new Socket(
+                        AddressFamily.InterNetwork,
+                        SocketType.Stream,
+                        ProtocolType.Tcp);
+                    try
+                    {
+                        Socket.Connect(EndPoint);
+                    }
+                    catch (Exception exp)
+                    {
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("Error: " + exp.Message);
+                    }
+                    if (Socket.Connected)
+                    {
+                        Socket.Send(Encoding.UTF8.GetBytes(ClientToken));
 
-        public void ConnectServer()
+                        byte[] Bytes = new byte[10485760];
+                        int ByteRec = Socket.Receive(Bytes);
+
+                        string Response = Encoding.UTF8.GetString(Bytes, 0, ByteRec);
+                        if (Response == "/disconnect")
+                        {
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            Console.WriteLine("The client is disconnected from the server");
+                            ClientToken = String.Empty;
+                        }
+                    }
+                }
+                Thread.Sleep(1000);
+            }
+        }
+        static void ConnectServer()
         {
             IPEndPoint EndPoint = new IPEndPoint(ServerIpAddress, ServerPort);
             Socket Socket = new Socket(
                 AddressFamily.InterNetwork,
                 SocketType.Stream,
                 ProtocolType.Tcp);
-
             try
             {
                 Socket.Connect(EndPoint);
             }
-            catch (Exception exp) 
+            catch (Exception exp)
             {
                 Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine("Error: " + exp.Message);
@@ -48,7 +89,7 @@ namespace Client
                 byte[] Bytes = new byte[10485760];
                 int ByteRec = Socket.Receive(Bytes);
 
-                string Response = Encoding.UTF8.GetString(Bytes,0,ByteRec);
+                string Response = Encoding.UTF8.GetString(Bytes, 0, ByteRec);
                 if (Response == "/limit")
                 {
                     Console.ForegroundColor = ConsoleColor.Red;
@@ -56,13 +97,13 @@ namespace Client
                 }
                 else
                 {
-                    ClientTocken = Response;
-                    ClientDateconnection = DateTime.Now;
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine("Recieved connection token: " + ClientTocken);
+                    ClientToken = Response;
+                    ClientDateConnection = DateTime.Now;
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("Recieved connection token: " + ClientToken);
                 }
             }
-
+        }
         static void GetStatus()
         {
             int Duration = (int)DateTime.Now.Subtract(ClientDateConnection).TotalSeconds;
@@ -71,7 +112,6 @@ namespace Client
                 $"duration: {Duration}");
 
         }
-
         static void SetCommand()
         {
             Console.ForegroundColor = ConsoleColor.Red;
@@ -85,15 +125,14 @@ namespace Client
             else if (Command == "/status") GetStatus();
             else if (Command == "/help") Help();
         }
-
         static void Help()
         {
-            Console.ForegroundColor= ConsoleColor.Green;
+            Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine("Command to the server: ");
 
-            Console.ForegroundColor=ConsoleColor.Green;
+            Console.ForegroundColor = ConsoleColor.Green;
             Console.Write("/config");
-            Console.ForegroundColor=ConsoleColor.White;
+            Console.ForegroundColor = ConsoleColor.White;
             Console.WriteLine(" - set initial serrings");
 
             Console.ForegroundColor = ConsoleColor.Green;
@@ -106,7 +145,6 @@ namespace Client
             Console.ForegroundColor = ConsoleColor.White;
             Console.WriteLine(" - show list users");
         }
-
         static void OnSettings()
         {
             string Path = Directory.GetCurrentDirectory() + "/.config";
@@ -148,8 +186,9 @@ namespace Client
             }
             Console.ForegroundColor = ConsoleColor.White;
             Console.Write("To change,write the command: ");
-            Console.ForegroundColor= ConsoleColor.Green;
+            Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine("/config ");
         }
-    }
+    }    
+    
 }
