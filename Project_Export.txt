@@ -1,0 +1,548 @@
+﻿PROJECT EXPORT - 11/25/2025 00:05:49
+Project Path: C:\Users\dreamgonewithout\Desktop\LicenseManagerPr4
+Total Files: 6
+
+================================================================================
+FILE: LicenseManager.sln
+================================================================================
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35527.113
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client", "Client\Client.csproj", "{6DC804AF-9003-4499-BEA9-F180FBC3F039}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleApp1", "ConsoleApp1\ConsoleApp1.csproj", "{1657174C-55FF-41F9-94B7-7379523DA247}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Server", "Server\Server.csproj", "{CB4F7E32-AFE0-46AD-A516-D47C81ECCAF4}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6DC804AF-9003-4499-BEA9-F180FBC3F039}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6DC804AF-9003-4499-BEA9-F180FBC3F039}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6DC804AF-9003-4499-BEA9-F180FBC3F039}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6DC804AF-9003-4499-BEA9-F180FBC3F039}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1657174C-55FF-41F9-94B7-7379523DA247}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1657174C-55FF-41F9-94B7-7379523DA247}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1657174C-55FF-41F9-94B7-7379523DA247}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1657174C-55FF-41F9-94B7-7379523DA247}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CB4F7E32-AFE0-46AD-A516-D47C81ECCAF4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CB4F7E32-AFE0-46AD-A516-D47C81ECCAF4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CB4F7E32-AFE0-46AD-A516-D47C81ECCAF4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CB4F7E32-AFE0-46AD-A516-D47C81ECCAF4}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {873966C1-1729-4DE2-A440-657AE52B8D78}
+	EndGlobalSection
+EndGlobal
+
+
+
+================================================================================
+FILE: Client\Client.csproj
+================================================================================
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
+
+
+
+================================================================================
+FILE: Client\Program.cs
+================================================================================
+using System;
+using System.ComponentModel.Design;
+using System.IO;
+using System.Net;
+using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Text;
+namespace Client
+{
+    class Program
+    {
+        static IPAddress ServerIpAddress;
+        static int ServerPort;
+        static string ClientToken;
+        static DateTime ClientDateConnection;
+
+        static void Main(string[] args)
+        {
+            OnSettings();
+
+            Thread tCheckToken = new Thread(CheckToken);
+            tCheckToken.Start();
+
+            while (true)
+                SetCommand();
+        }
+        static void CheckToken()
+        {
+            while (true)
+            {
+                if (!String.IsNullOrEmpty(ClientToken))
+                {
+                    IPEndPoint EndPoint = new IPEndPoint(ServerIpAddress, ServerPort);
+                    Socket Socket = new Socket(
+                        AddressFamily.InterNetwork,
+                        SocketType.Stream,
+                        ProtocolType.Tcp);
+                    try
+                    {
+                        Socket.Connect(EndPoint);
+                    }
+                    catch (Exception exp)
+                    {
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("Error: " + exp.Message);
+                    }
+                    if (Socket.Connected)
+                    {
+                        Socket.Send(Encoding.UTF8.GetBytes(ClientToken));
+
+                        byte[] Bytes = new byte[10485760];
+                        int ByteRec = Socket.Receive(Bytes);
+
+                        string Response = Encoding.UTF8.GetString(Bytes, 0, ByteRec);
+                        if (Response == "/disconnect")
+                        {
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            Console.WriteLine("The client is disconnected from the server");
+                            ClientToken = String.Empty;
+                        }
+                    }
+                }
+                Thread.Sleep(1000);
+            }
+        }
+        static void ConnectServer()
+        {
+            IPEndPoint EndPoint = new IPEndPoint(ServerIpAddress, ServerPort);
+            Socket Socket = new Socket(
+                AddressFamily.InterNetwork,
+                SocketType.Stream,
+                ProtocolType.Tcp);
+            try
+            {
+                Socket.Connect(EndPoint);
+            }
+            catch (Exception exp)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Error: " + exp.Message);
+            }
+            if (Socket.Connected)
+            {
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("Connection to server successful");
+
+                Socket.Send(Encoding.UTF8.GetBytes("/token"));
+
+                byte[] Bytes = new byte[10485760];
+                int ByteRec = Socket.Receive(Bytes);
+
+                string Response = Encoding.UTF8.GetString(Bytes, 0, ByteRec);
+                if (Response == "/limit")
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("There is not enough space on the license server");
+                }
+                else
+                {
+                    ClientToken = Response;
+                    ClientDateConnection = DateTime.Now;
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("Recieved connection token: " + ClientToken);
+                }
+            }
+        }
+        static void GetStatus()
+        {
+            int Duration = (int)DateTime.Now.Subtract(ClientDateConnection).TotalSeconds;
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine($"Client: {ClientToken}, time connection: {ClientDateConnection.ToString("HH:mm:ss dd.MM")}, " +
+                $"duration: {Duration}");
+
+        }
+        static void SetCommand()
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            string Command = Console.ReadLine();
+            if (Command == "/config")
+            {
+                File.Delete(Directory.GetCurrentDirectory() + "/.config");
+                OnSettings();
+            }
+            else if (Command == "/connect") ConnectServer();
+            else if (Command == "/status") GetStatus();
+            else if (Command == "/help") Help();
+        }
+        static void Help()
+        {
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("Command to the server: ");
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.Write("/config");
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine(" - set initial serrings");
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.Write("/connect");
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine(" - connection to the server");
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.Write("/status");
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine(" - show list users");
+        }
+        static void OnSettings()
+        {
+            string Path = Directory.GetCurrentDirectory() + "/.config";
+            string IpAddress = "";
+            if (File.Exists(Path))
+            {
+                StreamReader streamReader = new StreamReader(Path);
+                IpAddress = streamReader.ReadLine();
+                ServerIpAddress = IPAddress.Parse(IpAddress);
+                ServerPort = int.Parse(streamReader.ReadLine());
+                streamReader.Close();
+
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.Write("Server address: ");
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine(IpAddress);
+
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.Write("Server port: ");
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine(ServerPort.ToString());
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.Write("Server address: ");
+                Console.ForegroundColor = ConsoleColor.Green;
+                IpAddress = Console.ReadLine();
+                Console.WriteLine(IpAddress);
+
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.Write("Please specify the license server port: ");
+                Console.ForegroundColor = ConsoleColor.Green;
+                ServerPort = int.Parse(Console.ReadLine());
+                StreamWriter streamWriter = new StreamWriter(Path);
+                streamWriter.WriteLine(IpAddress);
+                streamWriter.WriteLine(ServerPort.ToString());
+                streamWriter.Close();
+            }
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.Write("To change,write the command: ");
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("/config ");
+        }
+    }    
+    
+}
+
+
+================================================================================
+FILE: ConsoleApp1\Program.cs
+================================================================================
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Threading;
+
+namespace ConsoleApp1
+{
+    class Program
+    {
+
+        static IPAddress ServerIpAddress;
+        static int ServerPort;
+        static int MaxClient;
+        static int Duration;
+
+        static List<Classes.Client> AllClients = new List<Classes.Client>();
+
+      
+
+        static void Main(string[] args)
+        {
+           OnSettings();
+
+            Thread tListener = new Thread(ConnectServer);
+            tListener.Start();
+
+            Thread tDisconnect = new Thread(CheckDisconnectClient);
+            tDisconnect.Start();
+
+            while (true) 
+                SetCommand();
+
+            
+        }
+        static void CheckDisconnectClient()
+        {
+            while (true)
+            {
+                for(int iCient  = 0; iCient < AllClients.Count; iCient++)
+                {
+                    int ClientDuration = (int)DateTime.Now.Subtract(AllClients[iCient].DateConnect).TotalSeconds;
+
+                    if (ClientDuration > Duration)
+                    {
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine($"Client: {AllClients[iCient].Token} disconnect from server due to timeout");
+
+                        AllClients.RemoveAt(iCient);
+                    }
+                }
+                Thread.Sleep(1000);
+            }
+        }
+        static void SetCommand()
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            string Command = Console.ReadLine();
+            if (Command == "/config")
+            {
+                File.Delete(Directory.GetCurrentDirectory() + "/.config");
+                OnSettings();
+            }
+            else if (Command.Contains("/disconnect")) DisconnectServer(Command);
+            else if (Command == "/status") GetStatus();
+            else if (Command == "/help") Help();
+        }
+        static string SetCommandClient(string Command)
+        {
+            if (Command == "/tocken")
+            {
+                if (AllClients.Count < MaxClient)
+                {
+                    Classes.Client newClient = new Classes.Client();
+                    AllClients.Add(newClient);
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine($"New clint connection: "+ newClient.Token);
+                    return newClient.Token;
+                }
+                else
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"There is not enough spase on the license server");
+                    return "/limit";
+                }
+            }
+            else
+            {
+                Classes.Client Client = AllClients.Find(x => x.Token == Command);
+                return Client != null ? "/connect" : "/desconnect";
+            }
+            return null;
+        }
+        static void DisconnectServer(string command)
+        {
+            try
+            {
+                 string Token = command.Replace("/disconnect ", "");
+                 Classes.Client DisconnectClient = AllClients.Find(x => x.Token == Token);
+                 AllClients.Remove(DisconnectClient);
+
+                 Console.ForegroundColor = ConsoleColor.White;
+                 Console.WriteLine($"Client: {Token} disconnect form server");
+            }
+            catch(Exception exp)
+            {
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.WriteLine("Error: " + exp.Message);
+            }
+           
+        }
+        static void ConnectServer()
+        {
+            IPEndPoint EndPoint = new IPEndPoint(ServerIpAddress, ServerPort);
+            Socket SocketListener = new Socket(
+                AddressFamily.InterNetwork,
+                SocketType.Stream,
+                ProtocolType.Tcp);
+            SocketListener.Bind(EndPoint);
+            SocketListener.Listen(10);
+
+            while (true)
+            {
+                Socket Handler = SocketListener.Accept();
+
+                byte[] Bytes = new byte[10485760];
+                int ByteRec = Handler.Receive(Bytes);
+
+                string Message = Encoding.UTF8.GetString(Bytes, 0, ByteRec);
+                string Recponse = SetCommandClient(Message);
+
+                Handler.Send(Encoding.UTF8.GetBytes(Recponse));
+            }
+        }  
+        static void GetStatus()
+        {
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine($"Count clients: {AllClients.Count}");
+
+            foreach (Classes.Client Client in AllClients)
+            {
+              int Duration = (int)DateTime.Now.Subtract(Client.DateConnect).TotalSeconds;
+              Console.ForegroundColor = ConsoleColor.White;
+              Console.WriteLine($"Client: {Client.Token}, time connection: {Client.DateConnect.ToString("HH:mm:ss dd.MM")}, " +
+              $"duration: {Duration}");
+            }
+        }
+        static void Help()
+        {
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("Command to the clients: ");
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.Write("/config");
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine(" - set initial serrings");
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.Write("/disconnect");
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine(" - disconnect users from the server");
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.Write("/status");
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine(" - show list users");
+        }
+        static void OnSettings()
+        {
+            string Path = Directory.GetCurrentDirectory() + "/.config";
+            string IpAddress = "";
+            if (File.Exists(Path))
+            {
+                StreamReader streamReader = new StreamReader(Path);
+                IpAddress = streamReader.ReadLine();
+                ServerIpAddress = IPAddress.Parse(IpAddress);
+                ServerPort = int.Parse(streamReader.ReadLine());
+                MaxClient = int.Parse(streamReader.ReadLine());
+                Duration = int.Parse(streamReader.ReadLine());
+                streamReader.Close();
+
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.Write("Server address: ");
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine(IpAddress);
+
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.Write("Server port: ");
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine(ServerPort.ToString());
+
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.Write("Max count client: ");
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine(MaxClient.ToString());
+
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.Write("Token lifetime: ");
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine(Duration.ToString());
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.Write("Server address: ");
+                Console.ForegroundColor = ConsoleColor.Green;
+                IpAddress = Console.ReadLine();
+                Console.WriteLine(IpAddress);
+
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.Write("Please specify the license server port: ");
+                Console.ForegroundColor = ConsoleColor.Green;
+                ServerPort = int.Parse(Console.ReadLine());
+
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.Write("Please indicate the largest number of clients: ");
+                Console.ForegroundColor = ConsoleColor.Green;
+                MaxClient = int.Parse(Console.ReadLine());
+
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.Write("Specify the token lifetime: ");
+                Console.ForegroundColor = ConsoleColor.Green;
+                Duration = int.Parse(Console.ReadLine());
+
+                StreamWriter streamWriter = new StreamWriter(Path);
+                streamWriter.WriteLine(IpAddress);
+                streamWriter.WriteLine(ServerPort.ToString());
+                streamWriter.WriteLine(MaxClient.ToString());
+                streamWriter.WriteLine(Duration.ToString());
+                streamWriter.Close();
+            }
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.Write("To change,write the command: ");
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("/config ");
+        }
+    }
+}
+
+
+
+================================================================================
+FILE: ConsoleApp1\Server.csproj
+================================================================================
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+
+</Project>
+
+
+
+================================================================================
+FILE: ConsoleApp1\Classes\Client.cs
+================================================================================
+using System;
+using System.Collections.Generic;
+using System.Text;
+using System.Linq;
+
+namespace ConsoleApp1.Classes
+{
+    class Client
+    {
+        public string Token { get; set; }
+        public DateTime DateConnect { get; set; }
+
+        public Client() { 
+            Random random = new Random();
+            string Chars = "";
+            this.Token = new string(Enumerable.Repeat(Chars, 15).Select(x => x[random.Next(Chars.Length)]).ToArray());
+            DateConnect = DateTime.Now;
+        }
+    }
+}
+
+
+
