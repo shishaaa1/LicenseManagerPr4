@@ -1,5 +1,5 @@
-﻿PROJECT EXPORT - 11/25/2025 00:05:49
-Project Path: C:\Users\dreamgonewithout\Desktop\LicenseManagerPr4
+﻿PROJECT EXPORT - 11/25/2025 16:37:29
+Project Path: C:\Users\student-a502.PERMAVIAT\Desktop\2456789\LicenseManagerPr4
 Total Files: 6
 
 ================================================================================
@@ -11,8 +11,6 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 VisualStudioVersion = 17.12.35527.113
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client", "Client\Client.csproj", "{6DC804AF-9003-4499-BEA9-F180FBC3F039}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleApp1", "ConsoleApp1\ConsoleApp1.csproj", "{1657174C-55FF-41F9-94B7-7379523DA247}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Server", "Server\Server.csproj", "{CB4F7E32-AFE0-46AD-A516-D47C81ECCAF4}"
 EndProject
@@ -261,7 +259,7 @@ namespace Client
 
 
 ================================================================================
-FILE: ConsoleApp1\Program.cs
+FILE: Server\Program.cs
 ================================================================================
 using System;
 using System.Collections.Generic;
@@ -271,7 +269,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 
-namespace ConsoleApp1
+namespace Server
 {
     class Program
     {
@@ -334,7 +332,7 @@ namespace ConsoleApp1
         }
         static string SetCommandClient(string Command)
         {
-            if (Command == "/tocken")
+            if (Command == "/token")
             {
                 if (AllClients.Count < MaxClient)
                 {
@@ -354,9 +352,8 @@ namespace ConsoleApp1
             else
             {
                 Classes.Client Client = AllClients.Find(x => x.Token == Command);
-                return Client != null ? "/connect" : "/desconnect";
+                return Client != null ? "/connect" : "/disconnect";
             }
-            return null;
         }
         static void DisconnectServer(string command)
         {
@@ -507,7 +504,7 @@ namespace ConsoleApp1
 
 
 ================================================================================
-FILE: ConsoleApp1\Server.csproj
+FILE: Server\Server.csproj
 ================================================================================
 <Project Sdk="Microsoft.NET.Sdk">
 
@@ -521,14 +518,14 @@ FILE: ConsoleApp1\Server.csproj
 
 
 ================================================================================
-FILE: ConsoleApp1\Classes\Client.cs
+FILE: Server\Classes\Client.cs
 ================================================================================
 using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
 
-namespace ConsoleApp1.Classes
+namespace Server.Classes
 {
     class Client
     {
@@ -537,7 +534,7 @@ namespace ConsoleApp1.Classes
 
         public Client() { 
             Random random = new Random();
-            string Chars = "";
+            string Chars = "QWERTYUIOPASDFGHJKLZXCVBNMqwertyuiopasdfghjklzxcvbnm0123456789";
             this.Token = new string(Enumerable.Repeat(Chars, 15).Select(x => x[random.Next(Chars.Length)]).ToArray());
             DateConnect = DateTime.Now;
         }

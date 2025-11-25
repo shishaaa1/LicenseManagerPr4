@@ -5,4 +5,9 @@
     <TargetFramework>net8.0</TargetFramework>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+    <PackageReference Include="MySql.Data" Version="9.5.0" />
+  </ItemGroup>
+
 </Project>
