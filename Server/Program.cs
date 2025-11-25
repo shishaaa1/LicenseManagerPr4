@@ -69,7 +69,7 @@ namespace Server
         }
         static string SetCommandClient(string Command)
         {
-            if (Command == "/tocken")
+            if (Command == "/token")
             {
                 if (AllClients.Count < MaxClient)
                 {
