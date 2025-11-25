@@ -21,8 +21,6 @@ namespace Server
 
         static void Main(string[] args)
         {
-            
-
             OnSettings();
             Thread tListener = new Thread(ConnectServer);
             tListener.Start();
@@ -32,17 +30,22 @@ namespace Server
                 SetCommand();
         }
 
+        // Моментальное отключение при бане + таймаут
         static void CheckDisconnectClient()
         {
             while (true)
             {
                 for (int i = AllClients.Count - 1; i >= 0; i--)
                 {
-                    int ClientDuration = (int)DateTime.Now.Subtract(AllClients[i].DateConnect).TotalSeconds;
-                    if (ClientDuration > Duration)
+                    var client = AllClients[i];
+                    bool isBlocked = IsUserBlocked(GetLoginByToken(client.Token));
+                    int duration = (int)DateTime.Now.Subtract(client.DateConnect).TotalSeconds;
+
+                    if (isBlocked || duration > Duration)
                     {
                         Console.ForegroundColor = ConsoleColor.Red;
-                        Console.WriteLine($"Client: {AllClients[i].Token} disconnected (timeout)");
+                        string reason = isBlocked ? "blocked by admin" : "timeout";
+                        Console.WriteLine($"Client disconnected: {client.Token} ({reason})");
                         AllClients.RemoveAt(i);
                     }
                 }
@@ -53,28 +56,71 @@ namespace Server
         static void SetCommand()
         {
             Console.ForegroundColor = ConsoleColor.Cyan;
-            string Command = Console.ReadLine();
-            if (Command == "/config")
+            string cmd = Console.ReadLine()?.Trim();
+            if (string.IsNullOrEmpty(cmd)) return;
+
+            if (cmd == "/config")
             {
-                File.Delete(Directory.GetCurrentDirectory() + "/.config");
+                File.Delete(".config");
                 OnSettings();
             }
-            else if (Command.StartsWith("/block "))
+            else if (cmd.StartsWith("/block "))
             {
-                string login = Command.Substring(7).Trim();
+                string login = cmd.Substring(7).Trim();
                 BlockUser(login, true);
+                DisconnectUserByLogin(login); // Моментальное отключение
             }
-            else if (Command.StartsWith("/unblock "))
+            else if (cmd.StartsWith("/unblock "))
             {
-                string login = Command.Substring(9).Trim();
+                string login = cmd.Substring(9).Trim();
                 BlockUser(login, false);
             }
-            else if (Command == "/status") GetStatus();
-            else if (Command == "/help") Help();
-            else
+            else if (cmd == "/status") GetStatus();
+            else if (cmd == "/help") Help();
+        }
+
+        // Моментальное отключение по логину
+        static void DisconnectUserByLogin(string login)
+        {
+            for (int i = AllClients.Count - 1; i >= 0; i--)
             {
-                Console.WriteLine("Unknown command. Use /help");
+                if (GetLoginByToken(AllClients[i].Token) == login)
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"Force disconnected: {login} (Token: {AllClients[i].Token})");
+                    AllClients.RemoveAt(i);
+                }
             }
+        }
+
+        static string GetLoginByToken(string token)
+        {
+            try
+            {
+                using var conn = new MySqlConnection(ConnectionString);
+                conn.Open();
+                string sql = "SELECT login FROM active_sessions WHERE token = @token";
+                using var cmd = new MySqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@token", token);
+                var result = cmd.ExecuteScalar();
+                return result?.ToString();
+            }
+            catch { return null; }
+        }
+
+        static bool IsUserBlocked(string login)
+        {
+            if (string.IsNullOrEmpty(login)) return false;
+            try
+            {
+                using var conn = new MySqlConnection(ConnectionString);
+                conn.Open();
+                using var cmd = new MySqlCommand("SELECT is_blocked FROM users WHERE login = @login", conn);
+                cmd.Parameters.AddWithValue("@login", login);
+                var result = cmd.ExecuteScalar();
+                return result != null && Convert.ToInt32(result) == 1;
+            }
+            catch { return false; }
         }
 
         static void BlockUser(string login, bool block)
@@ -89,7 +135,9 @@ namespace Server
                 cmd.Parameters.AddWithValue("@login", login);
                 int rows = cmd.ExecuteNonQuery();
                 Console.ForegroundColor = block ? ConsoleColor.Red : ConsoleColor.Green;
-                Console.WriteLine(rows > 0 ? $"User {login} {(block ? "added to blacklist" : "removed from blacklist")}" : "User not found");
+                Console.WriteLine(rows > 0
+                    ? $"User '{login}' {(block ? "BLOCKED" : "UNBLOCKED")}"
+                    : "User not found");
             }
             catch (Exception ex)
             {
@@ -100,60 +148,93 @@ namespace Server
 
         static string ProcessClientMessage(string message)
         {
-            if (!message.Contains(":"))
-                return "/error Invalid format";
+            if (!message.Contains(":")) return "/error Invalid format";
 
             var parts = message.Split(':');
-            if (parts.Length != 2) return "/error Invalid format";
+            if (parts.Length < 2) return "/error Invalid format";
+
             string login = parts[0].Trim();
             string password = parts[1].Trim();
+            bool isRegister = parts.Length > 2 && parts[2].Trim() == "register";
 
             try
             {
                 using var conn = new MySqlConnection(ConnectionString);
                 conn.Open();
 
-                // 1. Проверка на чёрный список (blacklist)
-                string checkBlockSql = "SELECT is_blocked FROM users WHERE login = @login";
-                using (var checkCmd = new MySqlCommand(checkBlockSql, conn))
+                // Проверка на блокировку
+                if (IsUserBlocked(login))
+                    return "/error Blocked";
+
+                // Регистрация
+                if (isRegister)
                 {
-                    checkCmd.Parameters.AddWithValue("@login", login);
-                    var blockedResult = checkCmd.ExecuteScalar();
-                    if (blockedResult != null && Convert.ToInt32(blockedResult) == 1)
-                    {
-                        return "/error Blocked";  // Клиент в чёрном списке
-                    }
+                    if (UserExists(login, conn))
+                        return "/error Already exists";
+
+                    string hash = BCrypt.Net.BCrypt.HashPassword(password);
+                    string sql = "INSERT INTO users (login, password_hash, is_blocked) VALUES (@login, @hash, 0)";
+                    using var cmd = new MySqlCommand(sql, conn);
+                    cmd.Parameters.AddWithValue("@login", login);
+                    cmd.Parameters.AddWithValue("@hash", hash);
+                    cmd.ExecuteNonQuery();
+
+                    Console.ForegroundColor = ConsoleColor.Magenta;
+                    Console.WriteLine($"New user registered: {login}");
+                    return "/success Registered! You can now login.";
                 }
 
-                // 2. Проверка логина и пароля
-                string authSql = "SELECT password_hash FROM users WHERE login = @login";
-                using var authCmd = new MySqlCommand(authSql, conn);
-                authCmd.Parameters.AddWithValue("@login", login);
-                var hashResult = authCmd.ExecuteScalar();
-                if (hashResult == null)
-                    return "/error User not found";
+                // Авторизация
+                if (!UserExists(login, conn))
+                    return "/error Not found. Send 'login:pass:register' to create account.";
 
-                string storedHash = (string)hashResult;
+                string storedHash = GetPasswordHash(login, conn);
                 if (!BCrypt.Net.BCrypt.Verify(password, storedHash))
                     return "/error Auth failed";
 
-                // 3. Проверка лимита клиентов
                 if (AllClients.Count >= MaxClient)
                     return "/error Limit reached";
 
-                // 4. Успех: генерируем уникальный токен
                 var newClient = new Classes.Client();
                 AllClients.Add(newClient);
+
+                // Сохраняем сессию (для моментального отключения)
+                SaveSession(login, newClient.Token, conn);
+
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.WriteLine($"Authenticated: {login} → Token: {newClient.Token}");
                 return newClient.Token;
             }
             catch (Exception ex)
             {
-                Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine("DB Exception: " + ex.Message);
                 return "/error DB error";
             }
+        }
+
+        static bool UserExists(string login, MySqlConnection conn)
+        {
+            using var cmd = new MySqlCommand("SELECT 1 FROM users WHERE login = @login", conn);
+            cmd.Parameters.AddWithValue("@login", login);
+            return cmd.ExecuteScalar() != null;
+        }
+
+        static string GetPasswordHash(string login, MySqlConnection conn)
+        {
+            using var cmd = new MySqlCommand("SELECT password_hash FROM users WHERE login = @login", conn);
+            cmd.Parameters.AddWithValue("@login", login);
+            return (string)cmd.ExecuteScalar();
+        }
+
+
+
+        static void SaveSession(string login, string token, MySqlConnection conn)
+        {
+            string sql = "REPLACE INTO active_sessions (login, token, last_seen) VALUES (@login, @token, NOW())";
+            using var cmd = new MySqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@login", login);
+            cmd.Parameters.AddWithValue("@token", token);
+            cmd.ExecuteNonQuery();
         }
 
         static void ConnectServer()
@@ -173,7 +254,46 @@ namespace Server
                     byte[] Bytes = new byte[10485760];
                     int ByteRec = Handler.Receive(Bytes);
                     string Message = Encoding.UTF8.GetString(Bytes, 0, ByteRec).Trim();
-                    string Response = ProcessClientMessage(Message);
+
+                    string Response;
+
+                    // Это проверка токена (не логин/пароль)
+                    if (!Message.Contains(":"))
+                    {
+                        var client = AllClients.Find(c => c.Token == Message);
+                        if (client == null)
+                        {
+                            Response = "/disconnect"; // старый токен
+                        }
+                        else
+                        {
+                            string login = GetLoginByToken(Message);
+                            if (IsUserBlocked(login))
+                            {
+                                // УДАЛЯЕМ ИЗ СПИСКА И ГОВОРИМ КЛИЕНТУ, ЧТО ОН ЗАБАНЕН
+                                AllClients.Remove(client);
+                                Response = "/blocked"; // ← НОВОЕ СООБЩЕНИЕ
+                                Console.ForegroundColor = ConsoleColor.Red;
+                                Console.WriteLine($"Клиент заблокирован и отключён: {login} (Token: {Message})");
+                            }
+                            else
+                            {
+                                Response = "/ok"; // токен валиден
+                                                  // Обновляем время активности
+                                using var conn = new MySqlConnection(ConnectionString);
+                                conn.Open();
+                                using var cmd = new MySqlCommand("UPDATE active_sessions SET last_seen = NOW() WHERE token = @token", conn);
+                                cmd.Parameters.AddWithValue("@token", Message);
+                                cmd.ExecuteNonQuery();
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Это логин/пароль — обрабатываем как раньше
+                        Response = ProcessClientMessage(Message);
+                    }
+
                     Handler.Send(Encoding.UTF8.GetBytes(Response));
                     Handler.Shutdown(SocketShutdown.Both);
                     Handler.Close();

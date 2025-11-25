@@ -38,17 +38,33 @@ namespace Client
                         byte[] Bytes = new byte[10485760];
                         int ByteRec = Socket.Receive(Bytes);
                         string Response = Encoding.UTF8.GetString(Bytes, 0, ByteRec).Trim();
+
                         if (Response == "/disconnect")
                         {
                             Console.ForegroundColor = ConsoleColor.Red;
-                            Console.WriteLine("Disconnected from server (invalid token)");
+                            Console.WriteLine("Лицензия истекла или токен недействителен.");
                             ClientToken = string.Empty;
                         }
+                        else if (Response == "/blocked")
+                        {
+                            Console.ForegroundColor = ConsoleColor.DarkRed;
+                            Console.BackgroundColor = ConsoleColor.Yellow;
+                            Console.WriteLine();
+                            Console.WriteLine("==========================================");
+                            Console.WriteLine("   ВЫ ЗАБЛОКИРОВАНЫ АДМИНИСТРАТОРОМ!   ");
+                            Console.WriteLine("   Токен аннулирован. Свяжитесь с админом.");
+                            Console.WriteLine("==========================================");
+                            Console.ResetColor();
+                            ClientToken = string.Empty;
+                            // Останавливаем дальнейшие проверки
+                            Thread.Sleep(Timeout.Infinite);
+                        }
+                        // /ok — ничего не делаем, всё хорошо
                     }
                     catch (Exception exp)
                     {
-                        Console.ForegroundColor = ConsoleColor.Red;
-                        Console.WriteLine("Token check error: " + exp.Message);
+                        // Сервер недоступен — не спамим, просто ждём
+                        Thread.Sleep(2000);
                     }
                 }
                 Thread.Sleep(1000);
@@ -58,12 +74,68 @@ namespace Client
         static void ConnectServer()
         {
             Console.ForegroundColor = ConsoleColor.White;
-            Console.Write("Login: ");
-            string login = Console.ReadLine().Trim();
-            Console.Write("Password: ");
-            string password = ReadPassword();
+            Console.WriteLine("=== АВТОРИЗАЦИЯ / РЕГИСТРАЦИЯ ===");
+            Console.WriteLine("Введите логин (или логин:пароль:register для регистрации)");
+            Console.Write("┌─ Login: ");
+            string input = Console.ReadLine()?.Trim();
+            Console.Write("└─ ");
 
-            string credentials = login + ":" + password;
+            if (string.IsNullOrEmpty(input))
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Логин не может быть пустым!");
+                return;
+            }
+
+            string login, password;
+            bool isRegister = false;
+
+            // Поддержка формата: login:pass:register
+            if (input.EndsWith(":register") && input.Contains(":"))
+            {
+                var parts = input.Split(':');
+                if (parts.Length >= 3)
+                {
+                    login = parts[0].Trim();
+                    password = parts[1].Trim();
+                    isRegister = true;
+                    Console.ForegroundColor = ConsoleColor.Magenta;
+                    Console.WriteLine($"→ Режим: РЕГИСТРАЦИЯ нового пользователя '{login}'");
+                }
+                else
+                {
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine("Формат регистрации: логин:пароль:register");
+                    return;
+                }
+            }
+            else if (input.Contains(":"))
+            {
+                // Формат: login:password
+                var parts = input.Split(':');
+                login = parts[0].Trim();
+                password = parts.Length > 1 ? parts[1].Trim() : "";
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine($"→ Режим: ВХОД под пользователем '{login}'");
+            }
+            else
+            {
+                // Классический ввод
+                login = input;
+                Console.Write("   Password: ");
+                password = ReadPassword();
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine($"→ Режим: ВХОД под пользователем '{login}'");
+            }
+
+            if (string.IsNullOrEmpty(login) || string.IsNullOrEmpty(password))
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Логин и пароль обязательны!");
+                return;
+            }
+
+            string credentials = isRegister ? $"{login}:{password}:register" : $"{login}:{password}";
 
             IPEndPoint EndPoint = new IPEndPoint(ServerIpAddress, ServerPort);
             using Socket Socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -76,42 +148,78 @@ namespace Client
                 int ByteRec = Socket.Receive(Bytes);
                 string Response = Encoding.UTF8.GetString(Bytes, 0, ByteRec).Trim();
 
+                Console.WriteLine();
+
                 if (Response.StartsWith("/error"))
                 {
                     Console.ForegroundColor = ConsoleColor.Red;
                     switch (Response)
                     {
                         case "/error Blocked":
-                            Console.WriteLine("Error: You are in the blacklist! Contact admin.");
+                            Console.WriteLine("Вы в ЧЁРНОМ СПИСКЕ! Обратитесь к администратору.");
                             break;
                         case "/error Auth failed":
                         case "/error User not found":
-                            Console.WriteLine("Error: Wrong login or password!");
+                            Console.WriteLine("Неверный логин или пароль!");
+                            Console.ForegroundColor = ConsoleColor.Yellow;
+                            Console.WriteLine("Подсказка: Для регистрации используйте формат:");
+                            Console.WriteLine("      логин:пароль:register");
                             break;
                         case "/error Limit reached":
-                            Console.WriteLine("Error: No free licenses on server!");
+                            Console.WriteLine("Все лицензии заняты! Подождите или обратитесь к админу.");
                             break;
-                        case "/error Invalid format":
-                            Console.WriteLine("Error: Invalid login/password format!");
+                        case "/error Already exists":
+                            Console.WriteLine("Пользователь с таким логином уже существует!");
                             break;
                         default:
-                            Console.WriteLine("Error: " + Response);
+                            Console.WriteLine("Ошибка сервера: " + Response.Replace("/error ", ""));
                             break;
                     }
+                }
+                else if (Response.StartsWith("/success"))
+                {
+                    Console.ForegroundColor = ConsoleColor.Magenta;
+                    Console.WriteLine("УСПЕШНО! " + Response.Replace("/success ", ""));
+                    Console.WriteLine("Теперь вы можете войти с этим логином и паролем.");
                 }
                 else
                 {
                     ClientToken = Response;
                     ClientDateConnection = DateTime.Now;
                     Console.ForegroundColor = ConsoleColor.Green;
-                    Console.WriteLine($"Success! Token: {ClientToken} (Valid for {DateTime.Now.AddSeconds(300):HH:mm:ss})");  // Пример, подставь Duration если нужно
+                    Console.WriteLine("ЛИЦЕНЗИЯ ПОЛУЧЕНА!");
+                    Console.WriteLine($"Токен: {ClientToken}");
+                    Console.WriteLine($"Токен активен. Проверка каждую секунду...");
                 }
             }
             catch (Exception exp)
             {
                 Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("Connection error: " + exp.Message);
+                Console.WriteLine("Ошибка подключения: " + exp.Message);
             }
+        }
+
+        static void Help()
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("════════════════════════════════════════════════");
+            Console.WriteLine("           ЛИЦЕНЗИОННЫЙ МЕНЕДЖЕР v4.0           ");
+            Console.WriteLine("════════════════════════════════════════════════");
+            Console.WriteLine("/connect    — вход или регистрация");
+            Console.WriteLine("/status     — проверить статус токена");
+            Console.WriteLine("/config     — сменить сервер (IP/порт)");
+            Console.WriteLine("/help       — это меню");
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("Как войти:");
+            Console.WriteLine("   → Просто введите логин и пароль");
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.Magenta;
+            Console.WriteLine("Как зарегистрироваться:");
+            Console.WriteLine("   → Введите: логин:пароль:register");
+            Console.WriteLine("   → Пример: admin123:secretpass:register");
+            Console.WriteLine();
+            Console.WriteLine("════════════════════════════════════════════════");
         }
 
         static string ReadPassword()
@@ -165,16 +273,6 @@ namespace Client
             {
                 Console.WriteLine("Unknown command. Use /help");
             }
-        }
-
-        static void Help()
-        {
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("Client commands:");
-            Console.WriteLine("/config  — reset settings");
-            Console.WriteLine("/connect — connect with login/password");
-            Console.WriteLine("/status  — show connection status");
-            Console.WriteLine("/help    — this help");
         }
 
         static void OnSettings()
