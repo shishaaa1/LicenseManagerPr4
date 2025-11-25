@@ -161,30 +161,22 @@ namespace Server
             {
                 using var conn = new MySqlConnection(ConnectionString);
                 conn.Open();
-
-                // Проверка на блокировку
                 if (IsUserBlocked(login))
                     return "/error Blocked";
-
-                // Регистрация
                 if (isRegister)
                 {
                     if (UserExists(login, conn))
                         return "/error Already exists";
-
                     string hash = BCrypt.Net.BCrypt.HashPassword(password);
                     string sql = "INSERT INTO users (login, password_hash, is_blocked) VALUES (@login, @hash, 0)";
                     using var cmd = new MySqlCommand(sql, conn);
                     cmd.Parameters.AddWithValue("@login", login);
                     cmd.Parameters.AddWithValue("@hash", hash);
                     cmd.ExecuteNonQuery();
-
                     Console.ForegroundColor = ConsoleColor.Magenta;
                     Console.WriteLine($"New user registered: {login}");
                     return "/success Registered! You can now login.";
                 }
-
-                // Авторизация
                 if (!UserExists(login, conn))
                     return "/error Not found. Send 'login:pass:register' to create account.";
 
@@ -197,8 +189,6 @@ namespace Server
 
                 var newClient = new Classes.Client();
                 AllClients.Add(newClient);
-
-                // Сохраняем сессию (для моментального отключения)
                 SaveSession(login, newClient.Token, conn);
 
                 Console.ForegroundColor = ConsoleColor.Green;
@@ -254,32 +244,27 @@ namespace Server
                     byte[] Bytes = new byte[10485760];
                     int ByteRec = Handler.Receive(Bytes);
                     string Message = Encoding.UTF8.GetString(Bytes, 0, ByteRec).Trim();
-
                     string Response;
-
-                    // Это проверка токена (не логин/пароль)
                     if (!Message.Contains(":"))
                     {
                         var client = AllClients.Find(c => c.Token == Message);
                         if (client == null)
                         {
-                            Response = "/disconnect"; // старый токен
+                            Response = "/disconnect";
                         }
                         else
                         {
                             string login = GetLoginByToken(Message);
                             if (IsUserBlocked(login))
                             {
-                                // УДАЛЯЕМ ИЗ СПИСКА И ГОВОРИМ КЛИЕНТУ, ЧТО ОН ЗАБАНЕН
                                 AllClients.Remove(client);
-                                Response = "/blocked"; // ← НОВОЕ СООБЩЕНИЕ
+                                Response = "/blocked";
                                 Console.ForegroundColor = ConsoleColor.Red;
                                 Console.WriteLine($"Клиент заблокирован и отключён: {login} (Token: {Message})");
                             }
                             else
                             {
-                                Response = "/ok"; // токен валиден
-                                                  // Обновляем время активности
+                                Response = "/ok";
                                 using var conn = new MySqlConnection(ConnectionString);
                                 conn.Open();
                                 using var cmd = new MySqlCommand("UPDATE active_sessions SET last_seen = NOW() WHERE token = @token", conn);
@@ -290,7 +275,6 @@ namespace Server
                     }
                     else
                     {
-                        // Это логин/пароль — обрабатываем как раньше
                         Response = ProcessClientMessage(Message);
                     }
 
@@ -319,13 +303,17 @@ namespace Server
 
         static void Help()
         {
+
             Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("════════════════════════════════════════════════");
+            Console.WriteLine("           LICENSE MANAGER          ");
             Console.WriteLine("Server commands:");
             Console.WriteLine("/config        — reset settings");
             Console.WriteLine("/block <login> — add user to blacklist (in DB)");
             Console.WriteLine("/unblock <login> — remove from blacklist");
             Console.WriteLine("/status        — show connected clients");
             Console.WriteLine("/help          — this help");
+            Console.WriteLine("════════════════════════════════════════════════");
         }
 
         static void OnSettings()
@@ -338,12 +326,12 @@ namespace Server
                 ServerPort = int.Parse(lines[1]);
                 MaxClient = int.Parse(lines[2]);
                 Duration = int.Parse(lines[3]);
-                Console.ForegroundColor = ConsoleColor.White;
+                Console.ForegroundColor = ConsoleColor.DarkGreen;
                 Console.WriteLine($"Loaded: IP={ServerIpAddress}, Port={ServerPort}, MaxClients={MaxClient}, Duration={Duration}s");
             }
             else
             {
-                Console.ForegroundColor = ConsoleColor.White;
+                Console.ForegroundColor = ConsoleColor.Green;
                 Console.Write("Server IP: ");
                 string ipStr = Console.ReadLine();
                 ServerIpAddress = IPAddress.Parse(ipStr);

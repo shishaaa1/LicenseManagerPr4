@@ -56,14 +56,11 @@ namespace Client
                             Console.WriteLine("==========================================");
                             Console.ResetColor();
                             ClientToken = string.Empty;
-                            // Останавливаем дальнейшие проверки
                             Thread.Sleep(Timeout.Infinite);
                         }
-                        // /ok — ничего не делаем, всё хорошо
                     }
                     catch (Exception exp)
                     {
-                        // Сервер недоступен — не спамим, просто ждём
                         Thread.Sleep(2000);
                     }
                 }
@@ -89,8 +86,6 @@ namespace Client
 
             string login, password;
             bool isRegister = false;
-
-            // Поддержка формата: login:pass:register
             if (input.EndsWith(":register") && input.Contains(":"))
             {
                 var parts = input.Split(':');
@@ -111,7 +106,6 @@ namespace Client
             }
             else if (input.Contains(":"))
             {
-                // Формат: login:password
                 var parts = input.Split(':');
                 login = parts[0].Trim();
                 password = parts.Length > 1 ? parts[1].Trim() : "";
@@ -120,7 +114,6 @@ namespace Client
             }
             else
             {
-                // Классический ввод
                 login = input;
                 Console.Write("   Password: ");
                 password = ReadPassword();
@@ -201,25 +194,31 @@ namespace Client
 
         static void Help()
         {
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("════════════════════════════════════════════════");
-            Console.WriteLine("           ЛИЦЕНЗИОННЫЙ МЕНЕДЖЕР v4.0           ");
-            Console.WriteLine("════════════════════════════════════════════════");
-            Console.WriteLine("/connect    — вход или регистрация");
-            Console.WriteLine("/status     — проверить статус токена");
-            Console.WriteLine("/config     — сменить сервер (IP/порт)");
-            Console.WriteLine("/help       — это меню");
-            Console.WriteLine();
-            Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine("Как войти:");
-            Console.WriteLine("   → Просто введите логин и пароль");
-            Console.WriteLine();
-            Console.ForegroundColor = ConsoleColor.Magenta;
-            Console.WriteLine("Как зарегистрироваться:");
-            Console.WriteLine("   → Введите: логин:пароль:register");
-            Console.WriteLine("   → Пример: admin123:secretpass:register");
-            Console.WriteLine();
-            Console.WriteLine("════════════════════════════════════════════════");
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine("════════════════════════════════════════════════");
+                Console.WriteLine("        LICENSE MANAGER            ");
+                Console.WriteLine("════════════════════════════════════════════════");
+                Console.WriteLine("/connect — login or register");
+                Console.WriteLine("/status  — check token status");
+                Console.WriteLine("/config  — change server IP/port");
+                Console.WriteLine("/help    — show this menu");
+                Console.WriteLine();
+
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine("How to log in:");
+                Console.WriteLine(" → Just enter your login and password");
+                Console.WriteLine();
+
+                Console.ForegroundColor = ConsoleColor.Magenta;
+                Console.WriteLine("How to register a new account:");
+                Console.WriteLine(" → Type: login:password:register");
+                Console.WriteLine(" → Example: john:MySecurePass123:register");
+                Console.WriteLine();
+
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine("════════════════════════════════════════════════");
+                Console.ResetColor();
+            
         }
 
         static string ReadPassword()
@@ -283,6 +282,7 @@ namespace Client
                 string[] lines = File.ReadAllLines(Path);
                 ServerIpAddress = IPAddress.Parse(lines[0]);
                 ServerPort = int.Parse(lines[1]);
+                Console.ForegroundColor= ConsoleColor.DarkGreen;
                 Console.WriteLine($"Loaded: IP={ServerIpAddress}, Port={ServerPort}");
             }
             else
